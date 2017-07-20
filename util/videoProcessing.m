@@ -1,17 +1,3 @@
-
-% VIDEOPROCESSING Implements video processing functions.
-%    VIDEOPROCESSING implements the necessary video processung functions
-%    required by SHADOWSCAN. As described in the assignment handout,
-%    this function accomplished two key tasks: (1) determination of
-%    fraction shadow-crossing times and (2) least-squares estimation 
-%    of the shadow boundaries. For more information see the accompanying
-%    assignment handout.
-%
-% Douglas Lanman and Gabriel Taubin 
-% Brown University
-% 18 May 2009
-
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Part 1: Determine the dynamic range and shadow threshold for each pixel.
@@ -32,8 +18,7 @@ h = waitbar(0,'Estimating per-pixel dynamic range...');
 % allFrames = 1:200;         % all frames in this sequence
 % recFrames = 61:151;        % frames used for reconstruction 见 man_vl.m
 for i = 1:length(allFrames) % allFrames = 200  200张图片
-   frame = imread(['./data/',objName,'/',seqName,'/',...
-       num2str(allFrames(i),'%0.6d'),'.jpg']); % 加载进200张图片
+   frame = imread(['./data/',objName,'/',seqName,'/', num2str(allFrames(i),'%0.6d'),'.jpg']); % 加载进200张图片
    frame = rgb2gray(frame);
    % 求200张图片的最小值和最大值
    minValue(frame < minValue) = frame(frame < minValue);
@@ -44,14 +29,10 @@ for i = 1:length(allFrames) % allFrames = 200  200张图片
 end
 close(h);
 
-figure(2); clf; set(gcf,'Name','Maxmum Value Per-pixel');
-imagesc(maxValue,[0 255]); axis image; colormap gray; 
-title('Maxmum Value Per-pixel'); drawnow;
-
 % Assign the shadow threshold for each pixel.
 % 为每个像素分配阈值
 shadowValue = 0.5*(minValue + maxValue);
-figure(3); clf; set(gcf,'Name','Shadow Threshold Per-pixel');
+figure(1); clf; set(gcf,'Name','Shadow Threshold Per-pixel');
 imagesc(shadowValue,[0 255]); axis image; colormap gray;
 title('Shadow Threshold Per-pixel'); pause(3.0);
 
@@ -85,20 +66,17 @@ figure(1); clf;  set(gcf,'Name','Shadow Boundaries');
 h = waitbar(0,'Estimating the shadow boundaries...');
 for i = 1:length(recFrames) % recFrames = 61:151  i = 1：91   
    % Extract the current frame (and convert to double-precision grayscale).
-   frame = imread(['./data/',objName,'/',seqName,'/',...
-       num2str(recFrames(i),'%0.6d'),'.jpg']);
+   frame = imread(['./data/',objName,'/',seqName,'/', num2str(recFrames(i),'%0.6d'),'.jpg']);
    frame = double(rgb2gray(frame));   
    % Evaluate the "vertical" shadow line.
    vImg = frame(vRows,vCols)-shadowValue(vRows,vCols);  % 剪裁后的差值图像
    for j = 2:length(vCols)
       % 每个像素都在某一幅图像中充当过零点
       % 对每一行进行过零检测 逻辑 0 或者逻辑 1   vROWS X 1 logical
-      idx = (vImg(:,j) >= 0) & (vImg(:,j-1) < 0); 
-      vRowPosEnter(idx) = (j-1) + (-vImg(idx,j-1))./(vImg(idx,j)...
-                          -vImg(idx,j-1))+vCols(1)-1; % 插值 
+      idx = (vImg(:,j) >= 0) & (vImg(:,j-1) < 0);
+      vRowPosEnter(idx) = (j-1) + (-vImg(idx,j-1))./(vImg(idx,j)-vImg(idx,j-1))+vCols(1)-1; % idx是行数？？ 插值
       idx = (vImg(:,j) < 0) & (vImg(:,j-1) >= 0);
-      vRowPosLeave(idx) = (j-1) + (-vImg(idx,j-1))./(vImg(idx,j)...
-                          -vImg(idx,j-1))+vCols(1)-1;
+      vRowPosLeave(idx) = (j-1) + (-vImg(idx,j-1))./(vImg(idx,j)-vImg(idx,j-1))+vCols(1)-1;
    end
    % 将第i幅图像的每一行的过零点进行最小二乘直线拟合 fitLine(X,Y)
    vLineEnter(i,:) = fitLine(vRowPosEnter,vRows);  
@@ -108,11 +86,9 @@ for i = 1:length(recFrames) % recFrames = 61:151  i = 1：91
    hImg = frame(hRows,hCols)-shadowValue(hRows,hCols);
    for j = 2:length(hCols)
       idx = (hImg(:,j) >= 0) & (hImg(:,j-1) < 0);
-      hRowPosEnter(idx) = (j-1) + (-hImg(idx,j-1))./(hImg(idx,j)...
-                          -hImg(idx,j-1))+hCols(1)-1;
+      hRowPosEnter(idx) = (j-1) + (-hImg(idx,j-1))./(hImg(idx,j)-hImg(idx,j-1))+hCols(1)-1;
       idx = (hImg(:,j) < 0) & (hImg(:,j-1) >= 0);
-      hRowPosLeave(idx) = (j-1) + (-hImg(idx,j-1))./(hImg(idx,j)...
-                          -hImg(idx,j-1))+hCols(1)-1;
+      hRowPosLeave(idx) = (j-1) + (-hImg(idx,j-1))./(hImg(idx,j)-hImg(idx,j-1))+hCols(1)-1;
    end
    hLineEnter(i,:) = fitLine(hRowPosEnter,hRows);
    hLineLeave(i,:) = fitLine(hRowPosLeave,hRows);
@@ -166,9 +142,13 @@ for i = 2:length(recFrames)
    frame1 = frame2;
    frame2 = imread(['./data/',objName,'/',seqName,'/',num2str(recFrames(i),'%0.6d'),'.jpg']);
    frame2 = double(rgb2gray(frame2));
-   idx = (frame1 >= shadowValue) & (frame2 <  shadowValue) & isnan(shadowEnter); % 相邻两图像和阈值图像求差
+   idx = (frame1 >= shadowValue) & (frame2 <  shadowValue) & isnan(shadowEnter); % 相邻两图像和阈值图像比较
+   imshow(idx);
+   % idx 384X512 logical 条纹处值为1，其余为0
    shadowEnter(idx) = (i-1) + (shadowValue(idx)-frame1(idx))./(frame2(idx)-frame1(idx));
+   % shadowEnter(1) 384X512 double 条纹为数字，其余为NaN
    idx = (frame1 <  shadowValue) & (frame2 >= shadowValue);
+   % imshow(idx);
    shadowLeave(idx) = (i-1) + (shadowValue(idx)-frame1(idx))./(frame2(idx)-frame1(idx));
    waitbar(i/length(recFrames));
 end

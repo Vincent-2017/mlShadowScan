@@ -1,10 +1,8 @@
-
 % 重置matlab环境
 clear; clc; close all;
 
 % 添加工具包
 addpath(genpath('./util'));
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -19,17 +17,7 @@ disp(' ');
 disp('Loading object and reconstruction parameters...');
 
 % Select which reconstruction script to use.
-%addpath('./data/demo/');      demo_v1;
 addpath('./data/man/');      man_v1;
-%addpath('./data/man/');      man_v2;
-%addpath('./data/frog/');     frog_v1;
-%addpath('./data/frog/');     frog_v2;
-%addpath('./data/chiquita/'); chiquita_v1;
-%addpath('./data/chiquita/'); chiquita_v2;
-%addpath('./data/schooner/'); schooner_v1;
-%addpath('./data/urn/');      urn_v1;
-%addpath('./data/yong/');     yong_v1;
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -83,8 +71,8 @@ hCols = round(min(x(:,1))):round(max(x(:,1)));
 
 % Perform necessary video processing.
 disp('videoProcessing...');
-videoProcessing; % 见 videoProcessing.m
-
+% 见 videoProcessing.m
+videoProcessing; 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -98,10 +86,10 @@ disp('Determining extrinsic calibration of reference plane(s)...');
 % Load intrinsic calibration.
 % Note: This assumes that you have already completed intrinsic calibration
 %       for this sequence. See the assignment handout for more details.
-load(['./data/',calName,'/Calib_Results'],...
-   'fc','cc','kc','alpha_c','nx','ny'); % 焦距、主点、畸变、偏斜、图像大小
+load(['./data/',calName,'/Calib_Results'],'fc','cc','kc','alpha_c','nx','ny'); % 焦距、主点、畸变、偏斜、图像大小
 
 % Obtain the extrinsic calibration for the "horizontal" plane.
+% 需要手动选取各平面的四个基准点
 % 获得水平平面的外部校正
 disp('   + finding the extrinsic parameters of the "horizontal" plane....');
 firstFrame = ['./data/',objName,'/',seqName,'/000001']; % ./data/man/v1-lr/000001
@@ -162,7 +150,8 @@ disp('   + recovering implicit representation of shadow planes...');
 %       for a complete description, or consult the assignment handout.
 shadowPlaneEnter = zeros(length(recFrames),4); % "entering" shadow plane
 shadowPlaneLeave = zeros(length(recFrames),4); % "leaving" shadow plane
-for i = 1:length(recFrames)
+for i = 1:length(recFrames) 
+   % 空间定位计算的是各顶点对应的空间点，并确定91张图片中的首光平面和尾光平面的方程，为插值提供依据
 
    % Determine true position of the "vertical" shadow boundary (entering).
    % intersectLines(vLineEnter(i,:),middleLine) 求两直线交点
@@ -210,10 +199,12 @@ for i = 1:length(recFrames)
    q_h = p1_h;  % 首边缘空间起点(中间交点) 
    v_h = (p2_h-p1_h)/norm(p2_h-p1_h); % 方向向量 （从中间交点指向下交点）
    shadowPlaneEnter(i,1:3) = cross(v_v,v_h);
+   % 0.2098   -0.5543    0.8054
    % 求投影光平面的法向量，前三维由叉积决定 
    % C = CROSS(A,B)  C = A x B.  A and B must be 3 element vectors.
    shadowPlaneEnter(i,1:3) = shadowPlaneEnter(i,1:3)/norm(shadowPlaneEnter(i,1:3)); % 归一化
    shadowPlaneEnter(i,4) = 0.5*shadowPlaneEnter(i,1:3)*(q_v+q_h);
+   % -6.5581
    
    % Determine true position of the "vertical" shadow boundary (leaving).
    n1_v = Rc_h'*pixel2ray(intersectLines(vLineLeave(i,:),middleLine),fc,cc,kc,alpha_c);
@@ -243,35 +234,59 @@ disp('   + reconstructing 3D points...');
 
 % Load first frame for assigning color.
 % Note: You could use the maximum value image or some other source here.
-frame = im2double(imread(['./data/',objName,'/',seqName,'/',...
-   num2str(allFrames(1),'%0.6d'),'.jpg']));
+frame = im2double(imread(['./data/',objName,'/',seqName,'/',num2str(allFrames(1),'%0.6d'),'.jpg']));
 
 % Reconstruct 3D points using intersection with shadow plane(s).
 % Note: If multiple shadow planes are used, then reduce errors
 %       by averaging available estimates. This can also assist
 %       in removing some outliers (if estimates do not agree).
-idx       = find(~isnan(shadowEnter) & ~isnan(shadowLeave));
-idx       = idx(1:dSample:length(idx));
-[row,col] = ind2sub(size(shadowEnter),idx);
+% a = ~isnan(shadowEnter); 384X512 logical
+% b = ~isnan(shadowLeave); 384X512 logical
+% c = a & b; 384X512 logical
+idx       = find(~isnan(shadowEnter) & ~isnan(shadowLeave)); % 先取逻辑值，再找索引 13289X1 double
+% find（A）返回矩阵A中非零元素所在位置,从第一行开始，1-inf
+% ~isnan(x)求得逻辑值
+% 13289X1 double
+idx       = idx(1:dSample:length(idx)); % 重采样，采样率1/5
+[row,col] = ind2sub(size(shadowEnter),idx);% 把数组中元素索引值转换为该元素在数组中对应的下标，即扫描点
+%   358   262
+%   363   262
+%   368   262
+%   ...
 npts      = length(idx);
 vertices  = zeros(npts,3);
 colors    = 0.65*ones(npts,3);
 h = waitbar(0,'Reconstructing 3D points...');
-for i = 1:npts
+for i = 1:npts % 被扫描的点有13289个，依次计算其空间位置
    
    % Obtain the camera ray for this pixel.
    n = Rc_h'*pixel2ray([col(i); row(i)],fc,cc,kc,alpha_c);
-   
+   %　经过物体表面的像素点（col(i),row(i)）的相机光线方向向量
+   % 0.2499
+   % 0.8134
+   % -0.5253
+
    % Interpolate "entering" shadow plane parameters (using shadow time).
+   % a = idx(i);
+   % b = shadowEnter(idx(i));
+   % c = ~isnan(shadowEnter(idx(i)));
+   % a =
+   %    170075
+   % b =
+   %    6.9688
+   % c =
+   %    1
    if ~isnan(shadowEnter(idx(i)))
-      t  = shadowEnter(idx(i));
-      t1 = floor(t);
+      t  = shadowEnter(idx(i)); % 相当于第t幅图像
+      t1 = floor(t); % 向下取整
       t2 = t1+1;
       if t2 <= length(recFrames)
-         alpha = (t-t1)/(t2-t1);
-         wEnter = (1-alpha)*shadowPlaneEnter(t1,:)+alpha*shadowPlaneEnter(t2,:);
-         pEnter = intersectLineWithPlane(C,n,wEnter');
-         vertices(i,:) = pEnter;
+         alpha = (t-t1)/(t2-t1); % 比例
+         wEnter = (1-alpha)*shadowPlaneEnter(t1,:)+alpha*shadowPlaneEnter(t2,:); 
+         % shadowPlaneEnter：length(recFrames)X4  91X4 
+         % 按比例插值计算在第t1幅光平面和第t2幅光平面之间的wEnter光平面方程
+         pEnter = intersectLineWithPlane(C,n,wEnter'); % 经过光心C、方向向量为n的射线与wEnter平面的交点pEnter
+         vertices(i,:) = pEnter; % 物体表面像素点对应的空间点
       end
    end
    
@@ -291,8 +306,9 @@ for i = 1:npts
    % Average "entering" and "leaving" estimates (if both are available).
    % Note: If points do not agree, set coordinate to infinity.
    %       This will ensure that it is clipped by the bounding volume.
+   % 如果点不一致，设坐标为无穷。这将确保它被边界卷所限。
    if ~isnan(shadowEnter(idx(i))) && ~isnan(shadowLeave(idx(i)))
-      if norm(pEnter-pLeave) <= distReject
+      if norm(pEnter-pLeave) <= distReject % 首尾距离
          vertices(i,:) = 0.5*(pEnter + pLeave);
       else
          vertices(i,:) = Inf*[1 1 1];
@@ -300,7 +316,7 @@ for i = 1:npts
    end
    
    % Assign color per vertex (using source image).
-   colors(i,:) = frame(row(i),col(i),:);
+   colors(i,:) = frame(row(i),col(i),:); % 着色
    
    % Update progress bar.
    waitbar(i/npts);
