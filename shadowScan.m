@@ -203,7 +203,7 @@ for i = 1:length(recFrames)
    % 求投影光平面的法向量，前三维由叉积决定 
    % C = CROSS(A,B)  C = A x B.  A and B must be 3 element vectors.
    shadowPlaneEnter(i,1:3) = shadowPlaneEnter(i,1:3)/norm(shadowPlaneEnter(i,1:3)); % 归一化
-   shadowPlaneEnter(i,4) = 0.5*shadowPlaneEnter(i,1:3)*(q_v+q_h);
+   shadowPlaneEnter(i,4) = 0.5*shadowPlaneEnter(i,1:3)*(q_v+q_h); % 如果不相交就取中点，看文献
    % -6.5581
    
    % Determine true position of the "vertical" shadow boundary (leaving).

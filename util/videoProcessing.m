@@ -11,7 +11,7 @@ disp('   + estimating per-pixel dynamic range and shadow thresholds...');
 frameDim = [size(frame,1) size(frame,2)]; % frame : 000001.jpg   frameDim : 384 X 512
 
 % Determine the minimum and maximum values observed in each pixel.
-maxValue = -Inf*ones(frameDim); % 赋最小值
+maxValue = -Inf*ones(frameDim); % 赋最小值 384x512 double
 minValue =  Inf*ones(frameDim); % 赋最大值
 figure(1); clf; set(gcf,'Name','Minimum Value Per-pixel');
 h = waitbar(0,'Estimating per-pixel dynamic range...');
@@ -20,7 +20,7 @@ h = waitbar(0,'Estimating per-pixel dynamic range...');
 for i = 1:length(allFrames) % allFrames = 200  200张图片
    frame = imread(['./data/',objName,'/',seqName,'/', num2str(allFrames(i),'%0.6d'),'.jpg']); % 加载进200张图片
    frame = rgb2gray(frame);
-   % 求200张图片的最小值和最大值
+   % ??? 求200张图片的最小值和最大值? 怎么比较的？
    minValue(frame < minValue) = frame(frame < minValue);
    maxValue(frame > maxValue) = frame(frame > maxValue); 
    imagesc(minValue,[0 255]); axis image; colormap gray; 
@@ -70,16 +70,22 @@ for i = 1:length(recFrames) % recFrames = 61:151  i = 1：91
    frame = double(rgb2gray(frame));   
    % Evaluate the "vertical" shadow line.
    vImg = frame(vRows,vCols)-shadowValue(vRows,vCols);  % 剪裁后的差值图像
-   for j = 2:length(vCols)
+   for j = 2:length(vCols) % vCols 1XvCols double
       % 每个像素都在某一幅图像中充当过零点
-      % 对每一行进行过零检测 逻辑 0 或者逻辑 1   vROWS X 1 logical
-      idx = (vImg(:,j) >= 0) & (vImg(:,j-1) < 0);
-      vRowPosEnter(idx) = (j-1) + (-vImg(idx,j-1))./(vImg(idx,j)-vImg(idx,j-1))+vCols(1)-1; % idx是行数？？ 插值
+      % 对每一行进行过零检测 逻辑 0 或者逻辑 1   
+      idx = (vImg(:,j) >= 0) & (vImg(:,j-1) < 0); % vROWS X 1 logical
+      % idx 满足跳变的行号？？？
+      % (j-1) 增加的列数    
+      % vImg(idx,j-1) 像素点(idx,j-1)的强度
+      % (-vImg(idx,j-1))./(vImg(idx,j)-vImg(idx,j-1)) 插值得像素点j与j-1之间的像素点
+      % vCols(1)-1 列起点 
+      % vRowPosEnter(idx)  跳变所在的列号 1XvCols double
+      vRowPosEnter(idx) = (j-1) + (-vImg(idx,j-1))./(vImg(idx,j)-vImg(idx,j-1))+vCols(1)-1; 
       idx = (vImg(:,j) < 0) & (vImg(:,j-1) >= 0);
       vRowPosLeave(idx) = (j-1) + (-vImg(idx,j-1))./(vImg(idx,j)-vImg(idx,j-1))+vCols(1)-1;
    end
-   % 将第i幅图像的每一行的过零点进行最小二乘直线拟合 fitLine(X,Y)
-   vLineEnter(i,:) = fitLine(vRowPosEnter,vRows);  
+   % 将第i幅图像的每一行的过零点进行最小二乘直线拟合 fitLine(X,Y) 
+   vLineEnter(i,:) = fitLine(vRowPosEnter,vRows);  % vRowPosEnter上升，vRows应该下降啊？？？
    vLineLeave(i,:) = fitLine(vRowPosLeave,vRows);
    
    % Evaluate the "horizontal" shadow line.
@@ -146,7 +152,7 @@ for i = 2:length(recFrames)
    imshow(idx);
    % idx 384X512 logical 条纹处值为1，其余为0
    shadowEnter(idx) = (i-1) + (shadowValue(idx)-frame1(idx))./(frame2(idx)-frame1(idx));
-   % shadowEnter(1) 384X512 double 条纹为数字，其余为NaN
+   % shadowEnter(idx) 384X512 double 条纹为数字，其余为NaN
    idx = (frame1 <  shadowValue) & (frame2 >= shadowValue);
    % imshow(idx);
    shadowLeave(idx) = (i-1) + (shadowValue(idx)-frame1(idx))./(frame2(idx)-frame1(idx));
